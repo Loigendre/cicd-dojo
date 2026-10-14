@@ -1,32 +1,90 @@
 version: 2.1
-jobs:
-  build-test:
-    docker:
-      # specify the version you desire here
-      - image: circleci/node:14
 
+# Image Docker commune aux jobs : même version de Node qu'en local
+executors:
+  node:
+    docker:
+      - image: cimg/node:24.15.0
+
+jobs:
+  # Installe les dépendances une seule fois et les transmet aux autres jobs
+  install:
+    executor: node
     steps:
       - checkout
-
-      # Download and cache dependencies
       - restore_cache:
           keys:
-          - v1-dependencies-{{ checksum "package.json" }}
-          # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
-
-      - run: npm install
-
+            - v2-npm-{{ checksum "package-lock.json" }}
+      # npm ci : installe exactement ce qui est dans package-lock.json
+      - run: npm ci
       - save_cache:
+          key: v2-npm-{{ checksum "package-lock.json" }}
           paths:
-            - node_modules
-          key: v1-dependencies-{{ checksum "package.json" }}
+            - ~/.npm
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
 
-      # run tests!
-      - run: npm run test
+  test:
+    executor: node
+    steps:
+      - attach_workspace:
+          at: .
+      # CircleCI définit CI=true : jest lance les tests une fois au lieu du mode watch
+      - run: npm test
+
+  build:
+    executor: node
+    steps:
+      - attach_workspace:
+          at: .
       - run: npm run build
+      - store_artifacts:
+          path: build
 
 workflows:
-  node-tests:
+  # test et build tournent en parallèle, après install
+  build-test:
     jobs:
-      - build-test
+      - install
+      - test:
+          requires:
+            - install
+      - build:
+          requires:
+            - install
+
+# Ancienne version (fournie avec le repo)
+# version: 2.1
+# jobs:
+#   build-test:
+#     docker:
+#       # specify the version you desire here
+#       - image: circleci/node:14
+#
+#     steps:
+#       - checkout
+#
+#       # Download and cache dependencies
+#       - restore_cache:
+#           keys:
+#           - v1-dependencies-{{ checksum "package.json" }}
+#           # fallback to using the latest cache if no exact match is found
+#           - v1-dependencies-
+#
+#       - run: npm install
+#
+#       - save_cache:
+#           paths:
+#             - node_modules
+#           key: v1-dependencies-{{ checksum "package.json" }}
+#
+#       # run tests!
+#       - run: npm run test
+#       - run: npm run build
+#
+# workflows:
+#   node-tests:
+#     jobs:
+#       - build-test
