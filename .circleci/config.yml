@@ -43,11 +43,24 @@ jobs:
       - store_artifacts:
           path: build
 
+  # Audit des dépendances : n'a besoin que de package-lock.json, pas de node_modules
+  security:
+    executor: node
+    steps:
+      - checkout
+      # npm audit sort en erreur s'il trouve des failles : || true pour ne pas bloquer le pipeline
+      - run: npm audit || true
+      # Rapport JSON complet téléchargeable dans l'onglet Artifacts du job
+      - run: mkdir -p reports && (npm audit --json > reports/npm-audit.json || true)
+      - store_artifacts:
+          path: reports
+
 workflows:
-  # test et build tournent en parallèle, après install
+  # test et build tournent en parallèle, après install ; security en parallèle dès le début
   build-test:
     jobs:
       - install
+      - security
       - test:
           requires:
             - install
